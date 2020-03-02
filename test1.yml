@@ -107,10 +107,12 @@
           - [100, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 22, 22]
         # allow ingress port 80
           - [200, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 80, 80]
+        # allow ingress port 443
+          - [210, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 443, 443]
         # allow icmp
           - [300, 'icmp', 'allow', "{{ destinationCidrBlock }}", 0, 8]
         # allow mysql
-          - [300, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 3306, 3306]
+          - [500, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 3306, 3306]
         # allow ingress ephemeral ports
           - [400, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 1024, 65535]      # egress acl rules
         egress:
@@ -119,6 +121,8 @@
           - [100, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 32768, 65535]
         # allow egres port 80
           - [200, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 80, 80]
+        # allow ingress port 80
+          - [210, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 443, 443]
         # allow egress mysql ports
           - [300, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 3306, 3306]
       register: acl_results
@@ -162,9 +166,24 @@
       register: ec2
       with_items:
           -  "{{ ec2_instances }}"
-     
+        
+    - name: Wait for SSH
+      wait_for:
+        host: "{{ item['instances'][0]['public_ip'] }}"
+        port: 22
+        delay: 10
+        timeout: 320
+        state: started
+      with_items: "{{ ec2.results }}"
+   
+    - name: Refresh the ec2.py cache
+      shell: /etc/ansible/hosts --refresh-cache
+
+    - name: Refresh inventory
+      meta: refresh_inventory
+
     - name: Wait a little longer for centos
-      pause: seconds=600          
+      pause: seconds=30          
             
 ############################################################
 

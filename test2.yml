@@ -8,6 +8,7 @@
   connection: ssh
   vars:
     mysql_root_password: mysql
+    mysql_db: wpdb
 
   pre_tasks:
     - name: 'update'
@@ -21,32 +22,46 @@
         - python-mysqldb
         - libmysqlclient-dev
         - python3-mysql.connector
+        - python3-pymysql 
 
     - name: Start the MySQL service
       action: service name=mysql state=started
 
-    - name: Remove the test database
-      mysql_db: name=test state=absent
-
-    - name: Ensure anonymous users are not in the database
-      mysql_user: user='' host= state=absent
-      with_items:
-        - 127.0.0.1
-        - ::1
-        - localhost
-
+    
     - name: Set the root password
       mysql_user:
         name: root
         password: "{{ mysql_root_password }}"
         login_unix_socket: /var/run/mysqld/mysqld.sock
+    
+    - name: Remove the test database
+      mysql_db: 
+        name: test 
+        state: absent
+        login_user: root
+        login_password: "{{mysql_root_password}}"
+
+    - name: Ensure anonymous users are not in the database
+      mysql_user: 
+        user: '' 
+        host: 
+          - 127.0.0.1
+          - ::1
+          - localhost
+        state: absent
+        login_user: root
+        login_password: "{{mysql_root_password}}"    
 
     - name: Update mysql root password for all root accounts
-      mysql_user: name=root host={{item}} password={{mysql_root_password}}
-      with_items:
-        - 127.0.0.1
-        - ::1
-        - localhost
+      mysql_user: 
+        name: root 
+        password: "{{mysql_root_password}}"
+        host:
+          - 127.0.0.1
+          - ::1
+          - localhost  
+        login_user: root         
+        login_password: "{{mysql_root_password}}"
 
     - name: Creates database for WordPress
       mysql_db:
@@ -62,6 +77,7 @@
         priv: "{{ mysql_db }}.*:ALL"
         state: present
         login_user: root
+        login_password: "{{ mysql_root_password }}"
 
 #################################################################
 

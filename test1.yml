@@ -109,15 +109,17 @@
           - [200, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 80, 80]
         # allow icmp
           - [300, 'icmp', 'allow', "{{ destinationCidrBlock }}", 0, 8]
+        # allow mysql
+          - [300, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 3306, 3306]
         # allow ingress ephemeral ports
-          - [400, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 3306, 3306]      # egress acl rules
+          - [400, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 1024, 65535]      # egress acl rules
         egress:
         # rule no, protocol, allow/deny, cidr, icmp_type, icmp_code, port from, port to
-        # allow egres port 22
+        # allow egres port ephemeral ports
           - [100, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 32768, 65535]
         # allow egres port 80
           - [200, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 80, 80]
-        # allow egress ephemeral ports
+        # allow egress mysql ports
           - [300, 'tcp', 'allow', "{{ destinationCidrBlock }}", null, null, 3306, 3306]
       register: acl_results
     - name: create ec2 VPC public subnet route table

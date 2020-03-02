@@ -1,0 +1,152 @@
+############################################################
+
+- hosts: tag_Name_Mysql
+  remote_user: ubuntu
+  gather_facts: no
+  become: yes
+  become_method: sudo
+  connection: ssh
+  vars:
+    mysql_root_password: mysql
+
+  tasks:
+    - name: Install MySQL
+      action: yum name={{ item }} state=present
+      with_items:
+        - mysql-server
+        - python-mysqldb
+        - libmysqlclient-dev
+        - python3-mysql.connector
+
+    - name: Start the MySQL service
+      action: service name=mysql state=started
+
+    - name: Remove the test database
+      mysql_db: name=test state=absent
+
+    - name: Ensure anonymous users are not in the database
+      mysql_user: user='' host= state=absent
+      with_items:
+        - 127.0.0.1
+        - ::1
+        - localhost
+
+    - name: Set the root password
+      mysql_user:
+        name: root
+        password: "{{ mysql_root_password }}"
+        login_unix_socket: /var/run/mysqld/mysqld.sock
+
+    - name: Update mysql root password for all root accounts
+      mysql_user: name=root host={{item}} password={{mysql_root_password}}
+      with_items:
+        - 127.0.0.1
+        - ::1
+        - localhost
+
+    - name: Creates database for WordPress
+      mysql_db:
+        name: "{{ mysql_db }}"
+        state: present
+        login_user: root
+        login_password: "{{ mysql_root_password }}"
+
+    - name: Create MySQL user for WordPress
+      mysql_user:
+        name: wpsql
+        password: wpsql
+        priv: "{{ mysql_db }}.*:ALL"
+        state: present
+        login_user: root
+
+#################################################################
+
+- hosts: tag_Name_Web
+  remote_user: ubuntu
+  gather_facts: no
+  become: yes
+  become_method: sudo
+  connection: ssh
+  handlers:
+    - name: Reload Apache
+      service:
+        name: apache2
+        state: reloaded
+
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted
+  vars:
+    php_modules: [ 'php-curl', 'php-gd', 'php-mbstring', 'php-xml', 'php-xmlrpc', 'php-soap', 'php-intl', 'php-zip' ]
+    http_host: "www.testboa.com"
+    http_conf: "testboa.conf"
+    http_port: "80"
+  tasks:
+    - name: Install apache
+      action: yum name={{ item }} state=present
+      with_items:
+        - apache2
+        - php
+        - php-mysql
+        - libapache2-mod-php
+        - "{{php_modules}}"
+    - name: Create document root
+      file:
+        path: "/var/www/{{ http_host }}"
+        state: directory
+        owner: "www-data"
+        group: "www-data"
+        mode: '0755'
+
+    - name: Set up Apache VirtualHost
+      template:
+        src: "files/apache.conf.j2"
+        dest: "/etc/apache2/sites-available/{{ http_conf }}"
+      notify: Reload Apache
+
+    - name: Enable rewrite module
+      shell: /usr/sbin/a2enmod rewrite
+      notify: Reload Apache
+
+    - name: Enable new site
+      shell: /usr/sbin/a2ensite {{ http_conf }}
+      notify: Reload Apache
+
+    - name: Disable default Apache site
+      shell: /usr/sbin/a2dissite 000-default.conf
+      notify: Restart Apache
+
+    - name: "UFW - Allow HTTP on port 80"
+      ufw:
+        rule: allow
+        port: "80"
+        proto: tcp
+
+#####################################################################
+
+    - name: Download and unpack latest WordPress
+      unarchive:
+        src: https://wordpress.org/latest.tar.gz
+        dest: "/var/www/{{ http_host }}"
+        remote_src: yes
+        creates: "/var/www/{{ http_host }}/wordpress"
+
+    - name: Set ownership
+      file:
+        path: "/var/www/{{ http_host }}"
+        state: directory
+        recurse: yes
+        owner: www-data
+        group: www-data
+
+    - name: Set permissions for directories
+      shell: "/usr/bin/find /var/www/{{ http_host }}/wordpress/ -type d -exec chmod 750 {} \\;"
+
+    - name: Set permissions for files
+      shell: "/usr/bin/find /var/www/{{ http_host }}/wordpress/ -type f -exec chmod 640 {} \\;"
+
+    - name: Set up wp-config
+      template:
+        src: "files/wp-config.php.j2"
+        dest: "/var/www/{{ http_host }}/wordpress/wp-config.php"
